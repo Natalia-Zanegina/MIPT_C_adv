@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-int main()
+int main(void)
 {
     int n, a, max = -2147483648, res = 0;
     scanf("%d", &n);
