@@ -117,6 +117,7 @@ void goTail(snake_t* head)
 
 void changeDirection(snake_t* snake, const int32_t key)
 {
+
     for (int i = 0; i < CONTROLS; i++)
     {
         if (key == snake -> controls[i].down)
@@ -140,7 +141,7 @@ _Bool isCrush(snake_t* snake) // проверка, не врезалась ли 
     return 0;
 }
 
-void printCrush() // печать сообщения об аварии, если змейка врезалась сама в себя
+void printCrush() // печать сообщения об аварии
 {
     int max_x = 0, max_y = 0;
     getmaxyx(stdscr, max_y, max_x);
@@ -165,7 +166,6 @@ int main(void)
     while (key_pressed != STOP_GAME)
     {
         key_pressed = getch();
-        _Bool snakeCrushed = 0;
         if (isCrush(snake))
         {
             printCrush(); // сообщение об аварии, если змейка врезалась сама в себя
