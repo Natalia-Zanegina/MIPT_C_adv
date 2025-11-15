@@ -10,6 +10,7 @@
 #define CONTROLS 3
 #define MAX_FOOD_SIZE 20
 #define FOOD_EXPIRE_SECONDS 10 
+#define PLAYERS 2
 double DELAY = 0.1;
 
 enum {
@@ -29,6 +30,8 @@ struct control_buttons
 };
 
 struct control_buttons default_controls[CONTROLS] = {{KEY_DOWN, KEY_UP, KEY_LEFT, KEY_RIGHT}, {'S', 'W', 'A', 'D'}, {'s', 'w', 'a', 'd'}};
+struct control_buttons player1_controls[CONTROLS] = {KEY_DOWN, KEY_UP, KEY_LEFT, KEY_RIGHT};
+struct control_buttons player2_controls[CONTROLS] = {{'S', 'W', 'A', 'D'}, {'s', 'w', 'a', 'd'}};
 
 typedef struct snake_t
 {
@@ -70,14 +73,20 @@ void initHead(snake_t* head, int x, int y)
     head -> direction = RIGHT;
 }
 
-void initSnake(snake_t* head, size_t size, int x, int y)
+void initSnake(snake_t* head[], size_t size, int x, int y, int i)
 {
+    head[i] = (snake_t*)malloc(sizeof(snake_t));
     tail_t* tail = (tail_t*) malloc(MAX_TAIL_SIZE * sizeof(tail_t));
     initTail(tail, MAX_TAIL_SIZE);
-    initHead(head, x, y);
-    head -> tail = tail;
-    head -> tsize = size + 1;
-    head -> controls = default_controls;
+    initHead(head[i], x, y);
+    head[i]->tail = tail;
+    head[i]->tsize = size + 1;
+    if(i == 0)
+        head[i]->controls = player1_controls;
+    else if(i == 1)
+        head[i]->controls = player2_controls;
+    else
+        head[i]->controls = default_controls;
 }
 
 void go(snake_t* head)
@@ -245,7 +254,26 @@ void addTail(struct snake_t *head){ // Увеличение хвоста на 1 
     head -> tsize++;
 }
 
-void update(struct snake_t* head, struct food f[], const int32_t key){
+int distance(const snake_t snake, const struct food food){
+    return (abs(snake.x - food.x) + abs(snake.y - food.y));
+}
+
+void autoChangeDirection(snake_t* snake, struct food food[], int foodSize)
+{
+    int pointer = 0;
+    for (int i = 1; i < foodSize; ++i) //
+        pointer = (distance(*snake, food[i]) < distance(*snake, food[pointer])) ? i : pointer;
+    
+    if ((snake->direction == RIGHT || snake->direction == LEFT) && (snake->y != food[pointer].y)) 
+    {
+        snake->direction = (food[pointer].y > snake->y) ? DOWN : UP;
+    } else if ((snake->direction == DOWN || snake->direction == UP) && (snake->x != food[pointer].x))
+    {
+        snake->direction = (food[pointer].x > snake->x) ? RIGHT : LEFT;    
+    }
+}
+
+void updateManual(struct snake_t* head, struct food f[], const int32_t key){
     clock_t begin = clock(); 
     go(head);
     goTail(head);
@@ -257,6 +285,20 @@ void update(struct snake_t* head, struct food f[], const int32_t key){
     refresh();
     while ((double) (clock() - begin) / CLOCKS_PER_SEC < DELAY)
     {}    
+}
+
+void update(snake_t* head, struct food f[], const int32_t key){
+    int max_x = 0, max_y = 0;
+    getmaxyx(stdscr, max_y, max_x);
+    autoChangeDirection(head, f, MAX_FOOD_SIZE);
+    go(head);
+    goTail(head);
+    refreshFood(f, MAX_FOOD_SIZE);
+    if (haveEat(head, f))
+    {
+        addTail(head);
+        DELAY -= 0.0001;
+    }    
 }
 
 void repairSeed(struct food f[], size_t nfood, struct snake_t* head) // проверка корректности выставления еды
@@ -282,7 +324,6 @@ void repairSeed(struct food f[], size_t nfood, struct snake_t* head) // пров
                 mvprintw(1, 1, "Repair same food %zu", j); 
                 putFoodSeed(&f[j]);
             }
-            
         }
     }
     
@@ -290,10 +331,13 @@ void repairSeed(struct food f[], size_t nfood, struct snake_t* head) // пров
 
 int main(void)
 {
-    snake_t* snake = (snake_t*)malloc(sizeof(snake_t));
+    snake_t* snakes[PLAYERS] = {0};
+    for (int i = 0; i < PLAYERS; i++)
+        initSnake(snakes, START_TAIL_SIZE, 10 + i * 10, 10 + i * 10, i);
+
+    
     struct food food[MAX_FOOD_SIZE];
 
-    initSnake(snake, START_TAIL_SIZE, 10, 10);
     initFood(food, MAX_FOOD_SIZE);
 
     initscr();
@@ -301,7 +345,7 @@ int main(void)
     raw();
     noecho();
     curs_set(FALSE);
-    mvprintw(0, 1, "Use arrows or WASD keys for control. Press 'F10' for EXIT.");
+    mvprintw(0, 1, "Use arrows for control of snake 1. Snake 2 is a bot. Press 'F10' for EXIT.");
     timeout(0);
     int key_pressed = 0;
 
@@ -311,23 +355,33 @@ int main(void)
     while (key_pressed != STOP_GAME)
     {
         key_pressed = getch();
-        if (isCrush(snake))
+        _Bool oneCrushed = 0;
+        for (int i = 0; i < PLAYERS; i++)
         {
-            printCrush();
+            if(!i)
+                updateManual(snakes[i], food, key_pressed);
+            else
+                update(snakes[i], food, key_pressed);
+            if (isCrush(snakes[i])){
+                oneCrushed = 1;
+                printCrush();
+                break;
+            }
+            repairSeed(food, MAX_FOOD_SIZE, snakes[i]);
+        }
+        if (oneCrushed)
+        {
+            printf("Crush! ");
             break;
         }
-        go(snake);
-        goTail(snake);
-        timeout(100);
-        refreshFood(food, MAX_FOOD_SIZE);
-        if(haveEat(snake, food)) // проверка на съедение
-            addTail(snake);
-        changeDirection(snake, key_pressed);
-        // repairSeed(food, MAX_FOOD_SIZE, snake); - добавить функцию
     }
     
-    free(snake -> tail);
-    free(snake);
+    for (int i = 0; i < PLAYERS; i++)
+    {
+        free(snakes[i] -> tail);
+        free(snakes[i]);
+    }
+    
     endwin();
     return 0;
 }
